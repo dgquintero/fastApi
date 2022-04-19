@@ -1,7 +1,8 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Response, status
 from config.db import conn
 from models.user import users
 from schemas.user import User
+from starlette.status import HTTP_204_NO_CONTENT
 
 from cryptography.fernet import Fernet
 
@@ -11,30 +12,45 @@ f = Fernet(key)
 
 user = APIRouter()
 
-@user.get("/users")
+# trae usuarios de la db
+
+
+@user.get("/users", response_model=list[User])
 def get_users():
-  return conn.execute(users.select()).fetchall()
+    return conn.execute(users.select()).fetchall()
 
-@user.post("/users")
+# crea usuario en la db
+
+
+@user.post("/users", response_model=User)
 def create_user(user: User):
-  new_user = {
-    "name": user.name, 
-    "email": user.email
-  }
-  new_user["password"] = f.encrypt(user.password.encode("utf-8"))
-  
-  result = conn.execute(users.insert().values(new_user))
-  print(result)
-  return "hello world"
+    new_user = {
+        "name": user.name,
+        "email": user.email
+    }
+    new_user["password"] = f.encrypt(user.password.encode("utf-8"))
 
-@user.get("/users")
-def helloworld():
-  return "hello world"
+    result = conn.execute(users.insert().values(new_user))
+    # print(result.lastrowid)
+    return conn.execute(users.select().where(users.c.id == result.lastrowid)).first()
 
-@user.get("/users")
-def helloworld():
-  return "hello world"
+# trae un unico usuario por id
 
-@user.get("/users")
-def helloworld():
-  return "hello world"
+
+@user.get("/users/{id}", response_model=User)
+def get_user(id: str):
+    return conn.execute(users.select().where(users.c.id == id)).first()
+
+# Elimina usuarios de la db
+
+
+@user.delete("/users/{id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_user(id: str):
+    conn.execute(users.delete().where(users.c.id == id))
+    return Response(status_code=HTTP_204_NO_CONTENT)
+
+@user.put("/users/{id}", response_model=User)
+def update_user(id: str, user: User):
+    conn.execute(users.update().values(name=user.name,
+                 email=user.email, password=f.encrypt(user.password.encode("utf-8"))).where(users.c.id == id))
+    return conn.execute(users.select().where(users.c.id == id)).first()
